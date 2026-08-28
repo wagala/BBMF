@@ -1,0 +1,1060 @@
+---
+title: "Getting Started with BBMF"
+author: "Adolphus Wagala"
+
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    keep-tex: false
+
+vignette: >
+  %\VignetteIndexEntry{Getting Started with BBMF}
+  %\VignetteEngine{quarto::pdf}
+  %\VignetteEncoding{UTF-8}
+
+execute:
+  echo: true
+  warning: false
+  message: false
+
+references:
+  - id: wagala2026bbmf
+    type: article-journal
+    title: "A Bayesian Boolean Matrix Factorization with Application to Copy Number Analysis in Cancer"
+    author:
+      - family: Wagala
+        given: Adolphus
+      - family: Samur
+        given: Mehmet
+      - family: Parmigiani
+        given: Giovanni
+    issued:
+      - year: 2026
+    URL: "https://arxiv.org/abs/2606.17491"
+    note: "arXiv:2606.17491"
+---
+
+## Introduction
+
+The `BBMF` package implements the Bayesian Boolean matrix factorization methods presented in *A Bayesian Boolean Matrix Factorization with Application to Copy Number Analysis in Cancer* by A. Wagala, M. Samur, and G. Parmigiani [@wagala2026bbmf].
+
+The package is designed for binary matrix data. For a binary matrix $X$ of dimension $K \times G$, BBMF represents
+
+$$X \approx W \circ H,$$
+
+where $W$ is a $K \times R$ binary sample-factor matrix, $H$ is an $R \times G$ binary factor-feature matrix, and $\circ$ denotes Boolean matrix multiplication.
+
+The package provides tools for fitting sparse Bayesian Boolean matrix factorizations, posterior inference, Boolean reconstruction, factor alignment, latent-factor recovery assessment, reconstruction diagnostics, posterior uncertainty quantification, and visualization.
+
+This vignette illustrates a basic BBMF workflow:
+
+- simulate a binary matrix;
+- initialize a Boolean factorization;
+- fit sparse BBMF;
+- inspect MCMC diagnostics;
+- select a representative posterior solution;
+- visualize the estimated latent factors;
+- align estimated factors;
+- assess latent-factor recovery using AFAS;
+- evaluate Boolean reconstruction;
+- summarize posterior uncertainty in $X$ and $H$.
+
+## Software requirements
+
+`BBMF` builds on several existing R packages.
+
+In particular, the package uses `rBMF` for the Asso Boolean matrix factorization used for initialization and comparison. Other packages provide supporting computational and visualization tools. For example, this vignette uses `reshape2` for data preparation and `patchwork` for arranging plots, while the plotting functions in `BBMF` use `ggplot2`.
+
+Before reproducing this vignette, users should ensure that the supporting packages are installed.
+
+```{r}
+#| label: install-packages
+#| eval: false
+
+install.packages(
+  c(
+    "rBMF",
+    "ggplot2",
+    "reshape2",
+    "patchwork",
+    "clue",
+    "abind",
+    "pbmcapply",
+    "progress"
+  )
+)
+```
+
+When `BBMF` is installed as an R package, packages listed as required dependencies are normally installed automatically.
+
+## Load BBMF
+
+```{r}
+#| label: setup
+
+library(BBMF)
+
+set.seed(101)
+```
+
+## Simulate a binary matrix
+
+We generate a small example with 64 samples, 44 genomic features, and four latent factors.
+
+```{r}
+#| label: simulation-setup
+
+K <- 64
+G <- 44
+R <- 4
+
+arms <- unlist(
+  lapply(
+    1:22,
+    function(i) paste0("chr", i, c("p", "q"))
+  )
+)
+
+sample_ids <- paste0(
+  "Sample_",
+  seq_len(K)
+)
+
+factor_names <- paste0(
+  "Factor_",
+  seq_len(R)
+)
+```
+
+### Generate the true factor-feature matrix
+
+We first generate a binary factor-feature matrix $H$ containing four latent feature patterns.
+
+```{r}
+#| label: simulate-H
+
+theta_high <- c(
+  0.80,
+  0.45,
+  0.65,
+  0.05
+)
+
+theta_low <- c(
+  0.05,
+  0.05,
+  0.25,
+  0.05
+)
+
+regions <- list(
+  1:22,
+  20:40,
+  25:44,
+  1:44
+)
+
+H_true <- matrix(
+  0,
+  nrow = R,
+  ncol = G
+)
+
+for (r in seq_len(R)) {
+
+  for (g in seq_len(G)) {
+
+    if (g %in% regions[[r]]) {
+
+      H_true[r, g] <- stats::rbinom(
+        1,
+        1,
+        theta_high[r]
+      )
+
+    } else {
+
+      H_true[r, g] <- stats::rbinom(
+        1,
+        1,
+        theta_low[r]
+      )
+    }
+  }
+}
+
+rownames(H_true) <- factor_names
+colnames(H_true) <- arms
+```
+
+### Visualize the true factor-feature matrix
+
+The function `matrixPlot()` can be used to visualize binary matrices.
+
+```{r}
+#| label: plot-true-H
+#| fig-width: 11
+#| fig-height: 3
+
+H_true_df <- reshape2::melt(
+  H_true
+)
+
+H_true_df$Var1 <- factor(
+  H_true_df$Var1,
+  levels = factor_names
+)
+
+pH <- matrixPlot(
+  H_true_df,
+  Var2,
+  Var1,
+  value,
+  title = "True Factor-Feature Matrix H"
+)
+
+pH
+```
+
+### Generate the true sample-factor matrix
+
+Factor prevalences are generated from a Beta distribution and used to generate the sample-factor matrix $W$.
+
+```{r}
+#| label: simulate-W
+
+nu <- stats::rbeta(
+  R,
+  shape1 = 2,
+  shape2 = 6
+)
+
+W_true <- matrix(
+  0,
+  nrow = K,
+  ncol = R
+)
+
+for (r in seq_len(R)) {
+
+  W_true[, r] <- stats::rbinom(
+    K,
+    size = 1,
+    prob = nu[r]
+  )
+}
+
+rownames(W_true) <- sample_ids
+colnames(W_true) <- factor_names
+```
+
+### Visualize the true sample-factor matrix
+
+```{r}
+#| label: plot-true-W
+#| fig-width: 5
+#| fig-height: 8
+
+W_true_df <- reshape2::melt(
+  W_true
+)
+
+W_true_df$Var2 <- factor(
+  W_true_df$Var2,
+  levels = factor_names
+)
+
+pW <- matrixPlot(
+  W_true_df,
+  Var2,
+  Var1,
+  value,
+  title = "True Sample-Factor Matrix W"
+)
+
+pW
+```
+
+### Construct the true Boolean matrix
+
+The function `bool_prod()` computes the Boolean product of $W$ and $H$.
+
+```{r}
+#| label: simulate-X
+
+X_true <- bool_prod(
+  W_true,
+  H_true
+)
+
+rownames(X_true) <- sample_ids
+colnames(X_true) <- arms
+```
+
+### Add noise
+
+The function `noise_bool()` can be used to randomly flip entries of a binary matrix. Here, 20% of the entries are flipped to generate the observed matrix.
+
+```{r}
+#| label: add-noise
+
+X_noisy <- noise_bool(
+  X_true,
+  noise_level = 0.20,
+  seed = 123
+)
+
+rownames(X_noisy) <- sample_ids
+colnames(X_noisy) <- arms
+```
+
+### Visualize the true and observed matrices
+
+```{r}
+#| label: plot-X
+#| fig-width: 12
+#| fig-height: 7
+
+X_true_df <- reshape2::melt(
+  X_true
+)
+
+X_noisy_df <- reshape2::melt(
+  X_noisy
+)
+
+pX <- matrixPlot(
+  X_true_df,
+  Var2,
+  Var1,
+  value,
+  title = "True X"
+)
+
+pX_noisy <- matrixPlot(
+  X_noisy_df,
+  Var2,
+  Var1,
+  value,
+  title = "Observed X"
+)
+
+patchwork::wrap_plots(
+  pX,
+  pX_noisy,
+  ncol = 2
+)
+```
+
+## Obtain an initial factorization
+
+The function `Asso_BBMF()` provides an interface to the Asso Boolean matrix factorization implemented through the `rBMF` package.
+
+The resulting factorization can be used to initialize BBMF.
+
+```{r}
+#| label: asso-initialization
+#| results: hide
+
+asso_fit <- Asso_BBMF(
+  X = X_noisy,
+  R = R,
+  seed = 101
+)
+
+W_asso <- asso_fit$W_asso
+H_asso <- asso_fit$H_asso
+X_asso <- asso_fit$X_asso
+
+rownames(W_asso) <- sample_ids
+colnames(W_asso) <- factor_names
+
+rownames(H_asso) <- factor_names
+colnames(H_asso) <- arms
+
+rownames(X_asso) <- sample_ids
+colnames(X_asso) <- arms
+```
+
+### Visualize the Asso factor-feature matrix
+
+```{r}
+#| label: plot-asso-H
+#| fig-width: 11
+#| fig-height: 3
+
+H_asso_df <- reshape2::melt(
+  H_asso
+)
+
+H_asso_df$Var1 <- factor(
+  H_asso_df$Var1,
+  levels = factor_names
+)
+
+matrixPlot(
+  H_asso_df,
+  Var2,
+  Var1,
+  value,
+  title = "Asso Estimate of H"
+)
+```
+
+## Fit sparse BBMF
+
+The main sparse BBMF fitting functions are `run_sparseBBMF()` for a single chain and `run_multiple_sparseBBMF()` for multiple chains.
+
+For this introductory example, we use a small number of iterations and two chains so that the vignette can be reproduced quickly. Applications should generally use longer chains and perform appropriate convergence assessment.
+
+```{r}
+#| label: fit-bbmf
+#| results: hide
+
+n_iter <- 200
+burn_in <- 0
+n_chains <- 2
+
+set.seed(2026)
+
+psi_o <- stats::rbinom(
+  G,
+  1,
+  0.5
+)
+
+fit_BBMF <- run_multiple_sparseBBMF(
+  X = X_noisy,
+  W_o = W_asso,
+  H_o = H_asso,
+  psi_o = psi_o,
+  n_iter = n_iter,
+  burn_in = burn_in,
+  n_chains = n_chains,
+  a1 = 1,
+  a2 = 1,
+  b1 = 1,
+  b2 = 1,
+  c1 = 1,
+  c2 = 1,
+  d1 = 1,
+  d2 = 1
+)
+```
+
+The returned object contains posterior samples of the latent matrices and model parameters for each MCMC chain.
+
+## MCMC diagnostics
+
+The function `diagnosBBMF()` calculates quantities such as the log-likelihood and log-posterior across MCMC samples.
+
+```{r}
+#| label: bbmf-diagnostics
+#| results: hide
+
+nn <- n_iter + 1
+
+diagnostic_BBMF <- diagnosBBMF(
+  X = X_noisy,
+  BBMFresult = fit_BBMF,
+  n_iter = nn,
+  burn_in = 0,
+  num_chains = n_chains
+)
+
+grouped_diagnostics <- group_diagnost_List(
+  diagnostic_BBMF
+)
+```
+
+For example, the sampled log-posterior values can be inspected using
+
+```{r}
+#| label: inspect-log-posterior
+
+head(
+  grouped_diagnostics$log_postr
+)
+```
+
+## Select a representative posterior solution
+
+For illustration, we select the sampled state with the largest log-posterior value across the chains.
+
+```{r}
+#| label: select-best-sample
+
+logPost <- grouped_diagnostics$log_postr
+
+logPost_mcmc <- logPost[
+  -1,
+  ,
+  drop = FALSE
+]
+
+max_logPost <- max(
+  as.matrix(logPost_mcmc),
+  na.rm = TRUE
+)
+
+best_position <- which(
+  as.matrix(logPost_mcmc) == max_logPost,
+  arr.ind = TRUE
+)[1, ]
+
+best_iteration <- best_position[1]
+best_chain <- best_position[2]
+
+best_sample_index <- best_iteration + 1
+
+best_fit <- fit_BBMF[[best_chain]]
+
+W_max <- best_fit$samples_W[
+  ,
+  ,
+  best_sample_index
+]
+
+H_max <- best_fit$samples_H[
+  ,
+  ,
+  best_sample_index
+]
+
+rownames(W_max) <- sample_ids
+colnames(W_max) <- factor_names
+
+rownames(H_max) <- factor_names
+colnames(H_max) <- arms
+
+X_tilde_BBMF <- bool_prod(
+  W_max,
+  H_max
+)
+
+rownames(X_tilde_BBMF) <- sample_ids
+colnames(X_tilde_BBMF) <- arms
+
+cat(
+  "Selected chain:", best_chain, "\n",
+  "Iteration:", best_iteration, "\n",
+  "Log-posterior:", round(max_logPost, 2), "\n"
+)
+```
+
+## Factor similarity and alignment
+
+The labels assigned to latent factors are arbitrary. Consequently, estimated factors should be aligned before comparing them with a reference factorization.
+
+`factor_similarity()` calculates Jaccard similarity between factors and uses the Hungarian algorithm to identify the optimal alignment.
+
+```{r}
+#| label: factor-similarity
+
+sim_BBMF <- factor_similarity(
+  H_ref = H_true,
+  H_est = H_max
+)
+
+sim_BBMF$alignment$matching
+
+sim_BBMF$mean_similarity
+```
+
+The aligned similarity matrix can be visualized using `plot_factor_similarity()`.
+
+```{r}
+#| label: plot-factor-similarity
+#| fig-width: 6
+#| fig-height: 5
+
+plot_factor_similarity(
+  similarity_result = sim_BBMF,
+  x_label = "BBMF Estimated Factors",
+  y_label = "True Factors",
+  title = "Factor Similarity"
+)
+```
+
+### Align $H$ and $W$
+
+The permutation obtained from $H$ is applied to the rows of $H$ and the corresponding columns of $W$.
+
+```{r}
+#| label: align-WH
+
+perm_BBMF <- sim_BBMF$permutation
+
+H_max_aligned <- H_max[
+  perm_BBMF,
+  ,
+  drop = FALSE
+]
+
+W_max_aligned <- W_max[
+  ,
+  perm_BBMF,
+  drop = FALSE
+]
+
+rownames(H_max_aligned) <- factor_names
+colnames(H_max_aligned) <- arms
+
+rownames(W_max_aligned) <- sample_ids
+colnames(W_max_aligned) <- factor_names
+```
+
+## Compare the factor-feature matrices
+
+The true and estimated $H$ matrices are displayed separately from the sample-factor matrices.
+
+```{r}
+#| label: compare-H
+#| fig-width: 11
+#| fig-height: 6
+
+H_max_df <- reshape2::melt(
+  H_max_aligned
+)
+
+H_max_df$Var1 <- factor(
+  H_max_df$Var1,
+  levels = factor_names
+)
+
+H_BBMF_graph <- matrixPlot(
+  H_max_df,
+  Var2,
+  Var1,
+  value,
+  title = "BBMF Estimate of H"
+)
+
+patchwork::wrap_plots(
+  pH,
+  H_BBMF_graph,
+  ncol = 1
+)
+```
+
+This comparison provides a direct view of the latent feature patterns recovered by BBMF.
+
+## Compare the sample-factor matrices
+
+The corresponding $W$ matrices show which latent factors are active for each sample.
+
+```{r}
+#| label: compare-W
+#| fig-width: 10
+#| fig-height: 8
+
+W_max_df <- reshape2::melt(
+  W_max_aligned
+)
+
+W_max_df$Var2 <- factor(
+  W_max_df$Var2,
+  levels = factor_names
+)
+
+W_BBMF_graph <- matrixPlot(
+  W_max_df,
+  Var2,
+  Var1,
+  value,
+  title = "BBMF Estimate of W"
+)
+
+patchwork::wrap_plots(
+  pW,
+  W_BBMF_graph,
+  ncol = 2
+)
+```
+
+## Aggregate Factor Alignment Similarity
+
+The Aggregate Factor Alignment Similarity (AFAS) summarizes the similarity between a reference factorization and an estimated factorization after optimal factor matching.
+
+For posterior sample $H^{(m)}$,
+
+$$\operatorname{AFAS}^{(m)}
+=
+\frac{1}{R}
+\sum_{r=1}^{R}
+J
+\left(
+H^{\mathrm{true}}_{r\cdot},
+H^{(m)}_{\sigma_m^*(r)\cdot}
+\right),$$
+
+where $J(\cdot,\cdot)$ denotes Jaccard similarity and $\sigma_m^*$ denotes the optimal factor assignment.
+
+Values closer to one indicate greater similarity between the estimated and reference latent structures.
+
+```{r}
+#| label: compute-afas
+
+afas_by_chain <- lapply(
+  fit_BBMF,
+  function(chain_fit) {
+
+    get_mean_sim_per_chain(
+      H_true = H_true,
+      ff = chain_fit$samples_H
+    )
+  }
+)
+
+afas_matrix <- do.call(
+  cbind,
+  afas_by_chain
+)
+
+afas_matrix <- afas_matrix[
+  -1,
+  ,
+  drop = FALSE
+]
+
+colnames(afas_matrix) <- paste0(
+  "Chain_",
+  seq_len(ncol(afas_matrix))
+)
+
+round(
+  apply(
+    afas_matrix,
+    2,
+    mean
+  ),
+  3
+)
+```
+
+AFAS for the selected posterior solution is
+
+```{r}
+#| label: afas-selected
+
+AFAS_H_max <- factor_similarity(
+  H_ref = H_true,
+  H_est = H_max
+)$mean_similarity
+
+round(
+  AFAS_H_max,
+  3
+)
+```
+
+## Reconstruction performance
+
+The function `bmf_metrics()` compares a Boolean reconstruction with a reference binary matrix.
+
+Here we compare reconstruction from Asso and sparse BBMF with the true simulated matrix.
+
+```{r}
+#| label: reconstruction-metrics
+
+X_hat_list <- list(
+  Asso = X_asso,
+  Sparse_BBMF = X_tilde_BBMF
+)
+
+Metrics <- do.call(
+  rbind,
+  lapply(
+    names(X_hat_list),
+    function(method) {
+
+      metrics <- bmf_metrics(
+        X = X_true,
+        X_hat = X_hat_list[[method]]
+      )
+
+      data.frame(
+        Method = method,
+        t(metrics),
+        row.names = NULL,
+        check.names = FALSE
+      )
+    }
+  )
+)
+
+numeric_cols <- vapply(
+  Metrics,
+  is.numeric,
+  logical(1)
+)
+
+Metrics[numeric_cols] <- round(
+  Metrics[numeric_cols],
+  3
+)
+
+Metrics
+```
+
+The reported measures include specificity, F1-score, Matthews correlation coefficient, and reconstruction error rate.
+
+## Posterior reconstruction probabilities
+
+BBMF retains posterior samples of $W$ and $H$. These samples can be used to reconstruct $X$ across the posterior distribution.
+
+First, the posterior arrays are extracted from each chain.
+
+```{r}
+#| label: posterior-X-samples
+#| results: hide
+
+Ws <- extract_samples_bbmf(
+  model_object = fit_BBMF,
+  sample_name = "samples_W"
+)
+
+Hs <- extract_samples_bbmf(
+  model_object = fit_BBMF,
+  sample_name = "samples_H"
+)
+```
+
+The Boolean reconstruction is then calculated for each posterior sample.
+
+```{r}
+#| label: reconstruct-X-posterior
+#| results: hide
+
+X_reconstructed <- lapply(
+  seq_along(Ws),
+  function(chain_id) {
+
+    reconstruct_X_one_chain_bbmf(
+      W_samples = Ws[[chain_id]],
+      H_samples = Hs[[chain_id]]
+    )
+  }
+)
+
+names(X_reconstructed) <- names(fit_BBMF)
+```
+
+Posterior reconstruction probabilities and uncertainty can then be summarized.
+
+```{r}
+#| label: posterior-X-summary
+
+X_summary <- summarize_X_reconstruction_bbmf(
+  reconstructed_chains = X_reconstructed,
+  X_truth = X_true
+)
+
+X_probability <- X_summary$probability
+
+X_uncertainty <- X_summary$uncertainty
+```
+
+For entry $(k,g)$, the posterior reconstruction probability is
+
+$$\widehat{P}_{kg}
+=
+\frac{1}{M}
+\sum_{m=1}^{M}
+\widetilde{X}_{kg}^{(m)}.$$
+
+A scaled measure of posterior uncertainty is
+
+$$U_{kg}
+=
+4\widehat{P}_{kg}
+\left(
+1-\widehat{P}_{kg}
+\right).$$
+
+Values close to zero indicate high posterior agreement, while values close to one indicate greater uncertainty.
+
+### Visualize posterior reconstruction probabilities
+
+```{r}
+#| label: posterior-X-probability
+#| fig-width: 11
+#| fig-height: 6
+
+X_long <- make_X_long_data_bbmf(
+  probability = X_probability,
+  uncertainty = X_uncertainty,
+  X_truth = X_true
+)
+
+plot_X_posterior_bbmf(
+  long_data = X_long$probability,
+  type = "probability",
+  title = "Posterior Reconstruction Probability"
+)
+```
+
+### Visualize posterior reconstruction uncertainty
+
+```{r}
+#| label: posterior-X-uncertainty
+#| fig-width: 11
+#| fig-height: 6
+
+plot_X_posterior_bbmf(
+  long_data = X_long$uncertainty,
+  type = "uncertainty",
+  title = "Posterior Reconstruction Uncertainty"
+)
+```
+
+## Posterior inclusion probabilities for $H$
+
+Posterior samples of $H$ cannot be averaged directly because factor labels may change across posterior samples.
+
+The package therefore provides `align_H_samples_bbmf()` for aligning posterior samples to a reference factorization.
+
+In this simulated example, the true $H$ matrix is used as the reference.
+
+```{r}
+#| label: posterior-H-alignment
+#| results: hide
+
+Hs_aligned <- lapply(
+  Hs,
+  function(H_chain) {
+
+    align_H_samples_bbmf(
+      H_ref = H_true,
+      H_samples = H_chain
+    )
+  }
+)
+
+names(Hs_aligned) <- names(Hs)
+```
+
+The aligned posterior samples can then be summarized using `summarize_H_posterior_bbmf()`.
+
+```{r}
+#| label: posterior-H-summary
+
+H_summary <- summarize_H_posterior_bbmf(
+  H_chains = Hs_aligned,
+  H_ref = H_true
+)
+
+H_probability <- H_summary$probability
+
+H_uncertainty <- H_summary$uncertainty
+```
+
+For factor $r$ and feature $g$, the posterior inclusion probability is
+
+$$\widehat{P}_{rg}^{H}
+=
+\frac{1}{M}
+\sum_{m=1}^{M}
+H_{rg}^{(m)}.$$
+
+### Posterior inclusion probability for $H$
+
+```{r}
+#| label: posterior-H-probability
+#| fig-width: 11
+#| fig-height: 4
+
+plot_H_posterior_bbmf(
+  matrix_summary = H_probability,
+  type = "probability",
+  title = "Posterior Inclusion Probabilities for H"
+)
+```
+
+### Posterior uncertainty for $H$
+
+```{r}
+#| label: posterior-H-uncertainty
+#| fig-width: 11
+#| fig-height: 4
+
+plot_H_posterior_bbmf(
+  matrix_summary = H_uncertainty,
+  type = "uncertainty",
+  title = "Posterior Uncertainty for H"
+)
+```
+
+The posterior inclusion probabilities summarize how frequently individual factor-feature associations are present across posterior samples, while the uncertainty plot highlights associations for which the posterior distribution is less certain.
+
+## Main BBMF functions
+
+The following functions illustrate the main capabilities of the package.
+
+| Function | Purpose |
+|----|----|
+| `bool_prod()` | Compute Boolean matrix products |
+| `noise_bool()` | Introduce random noise into binary matrices |
+| `Asso_BBMF()` | Obtain an Asso Boolean factorization using `rBMF` |
+| `run_sparseBBMF()` | Fit a single sparse BBMF chain |
+| `run_multiple_sparseBBMF()` | Fit multiple sparse BBMF chains |
+| `diagnosBBMF()` | Compute MCMC diagnostic quantities |
+| `group_diagnost_List()` | Organize diagnostics across chains |
+| `matrixPlot()` | Visualize binary matrices |
+| `jaccard_rows()` | Compute row-wise Jaccard similarities |
+| `jaccard_cols()` | Compute column-wise Jaccard similarities |
+| `factor_alignment_hungarian()` | Align latent factors using optimal assignment |
+| `factor_similarity()` | Assess similarity between two factor matrices |
+| `plot_factor_similarity()` | Visualize factor similarity |
+| `get_mean_sim_per_chain()` | Calculate AFAS across posterior samples |
+| `bmf_metrics()` | Evaluate Boolean reconstruction performance |
+| `extract_samples_bbmf()` | Extract posterior samples from BBMF chains |
+| `reconstruct_X_one_chain_bbmf()` | Reconstruct $X$ from posterior samples |
+| `summarize_X_reconstruction_bbmf()` | Summarize posterior reconstruction of $X$ |
+| `plot_X_posterior_bbmf()` | Visualize posterior summaries for $X$ |
+| `align_H_samples_bbmf()` | Align posterior samples of $H$ |
+| `summarize_H_posterior_bbmf()` | Calculate posterior summaries for $H$ |
+| `plot_H_posterior_bbmf()` | Visualize posterior summaries for $H$ |
+
+## Typical workflow
+
+A typical analysis using `BBMF` follows the general workflow
+
+``` text
+Observed binary matrix X
+          |
+          v
+Initial Boolean factorization
+          |
+          v
+Sparse BBMF
+          |
+          +----> MCMC diagnostics
+          |
+          +----> Posterior samples of W and H
+          |          |
+          |          +----> factor alignment
+          |          +----> factor similarity / AFAS
+          |          +----> posterior inclusion probabilities
+          |          +----> posterior uncertainty
+          |
+          +----> Boolean reconstruction of X
+                     |
+                     +----> reconstruction metrics
+                     +----> posterior reconstruction probabilities
+                     +----> posterior reconstruction uncertainty
+```
+
+The `BBMF` package therefore provides a workflow for estimating interpretable Boolean latent patterns while retaining the posterior information needed to evaluate factor stability, reconstruction performance, and uncertainty.
+
+## Acknowledgements
+
+The `BBMF` package implements the Bayesian Boolean matrix factorization methodology described by Wagala, Samur, and Parmigiani [@wagala2026bbmf].
+
+The package uses functionality from several existing R packages. In particular, `rBMF` provides the Asso Boolean matrix factorization used for initialization and comparison. Packages including `ggplot2`, `reshape2`, and `patchwork` support visualization and data preparation, while additional R packages provide computational utilities used internally by `BBMF`.
+
+## References
+
+::: {#refs}
+:::

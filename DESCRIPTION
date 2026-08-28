@@ -1,0 +1,47 @@
+Package: BBMF
+Type: Package
+Title: Bayesian Boolean Matrix Factorization
+Version: 0.0.0.9000
+Authors@R:
+    person(
+      given = "Adolphus",
+      family = "Wagala",
+      role = c("aut", "cre"),
+      email = "adolphus@ds.dfci.harvard.edu"
+    )
+Description:
+    Implements Bayesian Boolean matrix factorization methods for binary
+    data developed in "A Bayesian Boolean Matrix Factorization with
+    Application to Copy Number Analysis in Cancer" by Wagala, Samur,
+    and Parmigiani. The package provides sparse Bayesian Boolean matrix
+    factorization, posterior inference using Markov chain Monte Carlo,
+    Boolean reconstruction, latent-factor alignment, factor-recovery
+    assessment, posterior uncertainty quantification, reconstruction
+    diagnostics, and visualization tools. The methodology was motivated
+    by the analysis of chromosomal copy number alterations in cancer but
+    is applicable to binary matrix data more generally.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+Imports:
+    abind,
+    clue,
+    forcats,
+    ggplot2,
+    grid,
+    parallel,
+    pbmcapply,
+    progress,
+    rBMF,
+    reshape2,
+    stats,
+    utils
+Suggests:
+    gridExtra,
+    patchwork,
+    quarto,
+    testthat (>= 3.0.0)
+VignetteBuilder: quarto
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

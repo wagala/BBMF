@@ -1,0 +1,14 @@
+utils::globalVariables(
+  c(
+    "Estimated_Factors",
+    "Factor",
+    "Feature",
+    "Probability",
+    "Reference_Factors",
+    "Sample",
+    "Similarity",
+    "Uncertainty",
+    "Value",
+    "txt_col"
+  )
+)
