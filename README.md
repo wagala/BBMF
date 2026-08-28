@@ -43,12 +43,16 @@ The package provides tools for:
 
 ## Installation
 
-The development version of `BBMF` can be installed directly from GitHub.
+The development version of `BBMF` can be installed from GitHub using:
 
 ```r
 install.packages("remotes")
 
-remotes::install_github("wagala/BBMF")
+remotes::install_github(
+  "wagala/BBMF",
+  build_vignettes = TRUE,
+  dependencies = TRUE
+)
 ```
 
 Then load the package:
