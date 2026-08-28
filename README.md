@@ -54,12 +54,34 @@ remotes::install_github(
   dependencies = TRUE
 )
 ```
+so that the vignette is built and installed.
+
 
 Then load the package:
 
 ```r
 library(BBMF)
 ```
+
+## Vignette
+
+A worked example demonstrating the main functionality of `BBMF` is included with the package.
+
+List the available vignettes with:
+
+```r
+vignette(package = "BBMF")
+```
+
+Open the introductory vignette directly with:
+
+```r
+vignette(
+  "BBMF-introduction",
+  package = "BBMF"
+)
+```
+
 
 ## Boolean matrix multiplication
 
@@ -323,15 +345,6 @@ plot_H_posterior_bbmf()
 | `summarize_H_posterior_bbmf()` | Summarize posterior inclusion in $H$ |
 | `plot_H_posterior_bbmf()` | Plot posterior summaries for $H$ |
 
-## Vignette
-
-A worked example demonstrating the main package functionality is included with the package.
-
-After installation, available vignettes can be listed using:
-
-```r
-vignette(package = "BBMF")
-```
 
 The introductory vignette demonstrates:
 
