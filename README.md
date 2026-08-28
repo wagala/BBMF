@@ -172,23 +172,22 @@ The package uses Jaccard similarity together with the Hungarian assignment algor
 
 The Aggregate Factor Alignment Similarity (AFAS) summarizes factor recovery after optimal alignment.
 
-For an estimated factor matrix $H^{(m)}$,
+For an estimated factor matrix $H^{(m)}$, AFAS is defined as
 
-$$
-\operatorname{AFAS}^{(m)}
+```math
+\mathrm{AFAS}^{(m)}
 =
 \frac{1}{R}
 \sum_{r=1}^{R}
-J
-\left(
+J\left(
 H^{\mathrm{ref}}_{r\cdot},
 H^{(m)}_{\sigma_m^*(r)\cdot}
-\right),
-$$
+\right).
+```
 
-where $J(\cdot,\cdot)$ is Jaccard similarity and $\sigma_m^*$ is the optimal factor assignment.
+Here, $J(\cdot,\cdot)$ denotes Jaccard similarity and $\sigma_m^*$ denotes the optimal factor assignment obtained using the Hungarian algorithm.
 
-AFAS values closer to 1 indicate greater similarity between the estimated and reference latent structures.
+AFAS values closer to 1 indicate greater similarity between the estimated and reference latent factor structures.
 
 Posterior AFAS values can be calculated using:
 
@@ -227,24 +226,24 @@ plot_X_posterior_bbmf()
 
 For entry $(k,g)$, the posterior reconstruction probability is
 
-$$
+```math
 \widehat{P}_{kg}
 =
 \frac{1}{M}
 \sum_{m=1}^{M}
 \widetilde{X}_{kg}^{(m)}.
-$$
+```
 
 Posterior uncertainty is summarized using
 
-$$
+```math
 U_{kg}
 =
 4\widehat{P}_{kg}
 \left(
 1-\widehat{P}_{kg}
 \right).
-$$
+```
 
 Values close to 0 indicate strong posterior agreement, while values close to 1 indicate greater posterior uncertainty.
 
@@ -262,13 +261,13 @@ plot_H_posterior_bbmf()
 
 For factor $r$ and feature $g$, the posterior inclusion probability is
 
-$$
-\widehat{P}_{rg}^{H}
+```math
+\widehat{P}^{H}_{rg}
 =
 \frac{1}{M}
 \sum_{m=1}^{M}
 H_{rg}^{(m)}.
-$$
+```
 
 These summaries allow users to identify factor-feature associations that are consistently supported across posterior samples.
 
