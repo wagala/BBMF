@@ -34,9 +34,9 @@ matrixPlot <- function(long_data, x_value, y_value, value, title = "") {
       fill = as.factor({{ value }})
     )
   ) +
-    ggplot2::geom_tile(colour = "white") +
+    ggplot2::geom_tile(colour = "grey") +
     ggplot2::labs(x = " ", y = " ", title = title) +
-    ggplot2::scale_fill_manual(values = c("cyan", "black")) +
+    ggplot2::scale_fill_manual(values = c("white", "black")) +
     ggplot2::theme_bw() +
     ggplot2::theme(
       text = ggplot2::element_text(size = 7),

@@ -1,46 +1,26 @@
-#' Update the Global Sparsity Probability Pi
+#' Update the Slab-Prior Probability pi (Full Conditional)
 #'
-#' Samples the global sparsity probability \code{pi} from its full
-#' conditional Beta distribution given the current binary sparsity
-#' indicators \eqn{\psi_g}.
+#' Draws a new value of \code{pi}, the prior probability that a
+#' feature belongs to the slab component, from its full conditional
+#' distribution.
 #'
-#' @param psi_g A binary vector of length \eqn{G} containing the
-#'   feature-specific sparsity indicators.
-#' @param d1 First shape parameter of the Beta prior for \code{pi}.
-#' @param d2 Second shape parameter of the Beta prior for \code{pi}.
+#' @param psi A binary vector of length \eqn{G}, the current
+#'   sparsity indicators.
+#' @param d1 Shape-1 hyperparameter of the Beta prior on \code{pi}.
+#' @param d2 Shape-2 hyperparameter of the Beta prior on \code{pi}.
 #'
-#' @return A numeric scalar containing the updated value of \code{pi}.
+#' @return A numeric scalar, the updated \code{pi}.
 #'
 #' @details
-#' Let \eqn{\boldsymbol{\psi} = (\psi_1, \ldots, \psi_G)} denote the
-#' vector of binary sparsity indicators. Assuming
+#' An ordinary Beta-Bernoulli conjugate update,
+#' \deqn{\pi \mid \mathrm{rest} \sim \mathrm{Beta}\!\left(d_1 +
+#'  \textstyle\sum_g \psi_g,\ \ d_2 + G - \sum_g \psi_g\right).}
 #'
-#' \deqn{
-#' \pi \sim \mathrm{Beta}(d_1, d_2),
-#' }
-#'
-#' the full conditional distribution is
-#'
-#' \deqn{
-#' \pi \mid \boldsymbol{\psi}
-#' \sim
-#' \mathrm{Beta}\left(
-#' d_1 + \sum_{g=1}^{G}\psi_g,
-#' d_2 + G - \sum_{g=1}^{G}\psi_g
-#' \right).
-#' }
-#'
-update_pi <- function(psi_g, d1, d2) {
-  # Calculate the total number of successes (psi_g = 1) and failures (psi_g = 0)
-  sum_psi <- sum(psi_g)  # Total number where psi_g = 1
-  G <- length(psi_g)     # Total number of psi_g values
-  
-  # Calculate the parameters for the Beta distribution
-  alpha_post <- sum_psi + d1
-  beta_post <- G - sum_psi + d2
-  
-  # Sample pi from the Beta distribution
-  pi_s <- stats::rbeta(1, alpha_post, beta_post)
-  
-  return(pi_s)
+#' @export
+update_pi <- function(psi, d1, d2) {
+
+  G <- length(psi)
+  pi_g <- stats::rbeta(1, d1 + sum(psi), d2 + G - sum(psi))
+
+  return(pi_g)
 }

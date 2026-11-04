@@ -2,47 +2,50 @@
 % Please edit documentation in R/update_H.R
 \name{update_H}
 \alias{update_H}
-\title{Update the Binary Factor Matrix H}
+\title{Update the Factor-Pattern Matrix H (Full Conditional)}
 \usage{
-update_H(W, H, X, beta, p11, p10)
+update_H(W, H, X, beta, phi, p11, p10)
 }
 \arguments{
-\item{W}{A binary matrix containing the current factor activations.}
+\item{W}{A binary matrix of dimension \eqn{K \times R} containing
+the current factor activations (held fixed during this call; is
+normally the just-updated output of \code{\link{update_W}}).}
 
 \item{H}{A binary matrix of dimension \eqn{R \times G} containing
-the current factor-specific feature patterns.}
+the current factor-specific feature patterns (updated row by
+row).}
 
-\item{X}{An observed binary data matrix.}
+\item{X}{An observed binary matrix of dimension \eqn{K \times G}.}
 
 \item{beta}{A numeric vector of length \eqn{G} containing the
-feature-specific Bernoulli prior probabilities.}
+per-feature activation probabilities \eqn{\beta_g}.}
 
-\item{p11}{Probability of observing an entry equal to 1 when the
-corresponding reconstructed entry is 1.}
+\item{phi}{A numeric vector of length \eqn{R} containing the
+per-factor inclusion probabilities \eqn{\phi_r}.}
 
-\item{p10}{Probability of observing an entry equal to 1 when the
-corresponding reconstructed entry is 0.}
+\item{p11}{Sensitivity: \eqn{P(X_{kg}=1 \mid Z_{kg}=1)}.}
+
+\item{p10}{False-positive rate: \eqn{P(X_{kg}=1 \mid Z_{kg}=0)}.}
 }
 \value{
-An updated binary matrix \code{H} with the same dimensions
-as the input matrix.
+An updated binary matrix \code{H} of the same dimension as
+the input.
 }
 \description{
-Performs a Gibbs update of each entry of the binary matrix \code{H}.
-For each element \eqn{H_{rg}}, the function evaluates the
-log-posterior probability under the two possible states,
-\eqn{H_{rg}=0} and \eqn{H_{rg}=1}, normalizes the corresponding
-posterior masses, and samples a new binary value.
+Draws a new factor-pattern matrix \code{H} from its full
+conditional distribution given the data, the current \code{W}, and
+the current values of every other parameter.
 }
 \details{
-The entries of \code{H} are updated sequentially. For each position
-\eqn{(r,g)}, the function computes the log-posterior probability
-after setting \eqn{H_{rg}} to 0 and then to 1.
-
-The two log-posterior values are normalized using \code{sumLog()}
-to obtain the conditional probability that \eqn{H_{rg}=1}. A new
-value is then sampled from a Bernoulli distribution.
-
-Because updates are sequential, each subsequent entry is updated
-conditional on the most recently updated values of \code{H}.
+Exact mirror of \code{\link{update_W}}, with the roles of samples
+and features exchanged: for each factor \eqn{r}, only patients
+\eqn{k} with \eqn{W_{kr}=1} and no other factor already covering
+\eqn{(k,g)} are informative about \eqn{H_{rg}}, giving a
+closed-form Bernoulli full conditional with success probability
+\deqn{\eta_{rg} = \frac{\beta_g \phi_r \, p_{11}^{n^{(1)}_{rg}}
+ (1-p_{11})^{n^{(0)}_{rg}}}{\beta_g \phi_r \, p_{11}^{n^{(1)}_{rg}}
+ (1-p_{11})^{n^{(0)}_{rg}} + (1-\beta_g \phi_r) \, p_{10}^{n^{(1)}_{rg}}
+ (1-p_{10})^{n^{(0)}_{rg}}}.}
+The coverage matrix is maintained incrementally, as in
+\code{\link{update_W}}, giving \eqn{O(KGR)} total cost per call.
 }

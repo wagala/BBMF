@@ -1,0 +1,81 @@
+#' Aggregate Factor-Alignment Similarity (AFAS)
+#'
+#' Compares an estimated factor-pattern matrix against the true factor
+#' matrix by finding the best one-to-one correspondence between their
+#' factors (rows), then averaging the resulting matched similarities.
+#'
+#' @param H_est A binary matrix of dimension \eqn{R \times G}: the
+#'   estimated factor-pattern matrix (e.g.\ \code{mc_fit$best_sample$H},
+#'   or the corresponding matrix from a competing method).
+#' @param H_truth A binary matrix of dimension \eqn{R \times G}: the
+#'   true factor-pattern matrix used to generate the simulated data.
+#'   Must have the same number of rows as \code{H_est}.
+#'
+#' @return A list with elements:
+#' \describe{
+#'   \item{\code{afas}}{A numeric scalar in \eqn{[0,1]}: the mean
+#'     Jaccard similarity of the optimally-matched factor pairs. Higher
+#'     is better; \code{1} means every factor in \code{H_est} has an
+#'     exact match in \code{H_truth}.}
+#'   \item{\code{assignment}}{An integer vector of length \eqn{R}:
+#'     \code{assignment[i]} is the row of \code{H_est} matched to row
+#'     \code{i} of \code{H_truth}.}
+#'   \item{\code{similarity_matrix}}{The full \eqn{R \times R} Jaccard
+#'     similarity matrix between every pair of rows, before alignment.}
+#' }
+#'
+#' @details
+#' Because factor labels are not identifiable (row \eqn{r} of a fitted
+#' \eqn{\mathbf{H}} need not correspond to row \eqn{r} of the true
+#' \eqn{\mathbf{H}}, only to \emph{some} row of it), a naive row-by-row
+#' comparison would be meaningless. AFAS instead computes the full
+#' \eqn{R \times R} matrix of pairwise Jaccard similarities
+#' (\code{\link{jaccard}}) between every true factor and every
+#' estimated factor, then finds the one-to-one assignment maximizing
+#' the sum of matched similarities -- an instance of the linear sum
+#' assignment problem, solved exactly via the Hungarian algorithm
+#' (\code{clue::solve_LSAP}). This is the same diagnostic used to track
+#' factor-recovery quality across MCMC iterations and to compare
+#' methods in Section 3.1 of the manuscript.
+#'
+#' Requires the \code{clue} package; if it is not installed, an error
+#' is raised with installation instructions rather than failing inside
+#' \code{solve_LSAP} itself.
+#'
+#' @examples
+#' \dontrun{
+#' afas_bbmf    <- compute_afas(H_hat,        H_true)
+#' afas_asso    <- compute_afas(H_asso,       H_true)
+#' afas_greconD <- compute_afas(H_GrenC_plus, H_true)
+#' data.frame(Method = c("BBMF","Asso","GreConD+"),
+#'            AFAS   = c(afas_bbmf$afas, afas_asso$afas, afas_greconD$afas))
+#' }
+#'
+#' @seealso \code{\link{jaccard}} for the pairwise similarity measure.
+#'
+#' @export
+compute_afas <- function(H_est, H_truth) {
+
+  if (!requireNamespace("clue", quietly = TRUE)) {
+    stop(
+      "compute_afas() requires the 'clue' package for Hungarian alignment. ",
+      "Install it with install.packages(\"clue\").",
+      call. = FALSE
+    )
+  }
+
+  stopifnot(nrow(H_est) == nrow(H_truth))
+  R_here <- nrow(H_truth)
+
+  S <- matrix(0, R_here, R_here)
+  for (i in 1:R_here) {
+    for (j in 1:R_here) {
+      S[i, j] <- jaccard(H_truth[i, ], H_est[j, ])
+    }
+  }
+
+  assign <- clue::solve_LSAP(S, maximum = TRUE)
+  matched_sim <- sapply(1:R_here, function(i) S[i, assign[i]])
+
+  list(afas = mean(matched_sim), assignment = assign, similarity_matrix = S)
+}

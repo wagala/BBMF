@@ -1,107 +1,189 @@
-#' Run the Bayesian Boolean Matrix Factorization Gibbs Sampler
+#' Run the BBMF Gibbs Sampler (Array-Based Output, with Burn-In)
 #'
-#' Runs a Gibbs sampler for the Bayesian Boolean Matrix Factorization
-#' model using an observed binary matrix \code{X} and initial values
-#' for the binary factor matrices \code{W} and \code{H}.
+#' Runs the full Gibbs sampler for the Bayesian Boolean Matrix
+#' Factorization model for a single chain, discarding an initial
+#' burn-in period and returning posterior samples as pre-allocated
+#' arrays/matrices/vectors rather than a list of per-iteration
+#' snapshots.
 #'
 #' @param X An observed binary matrix of dimension \eqn{K \times G}.
-#' @param W_o Initial binary matrix of dimension \eqn{K \times R}
-#'   containing the factor activations.
-#' @param H_o Initial binary matrix of dimension \eqn{R \times G}
-#'   containing the factor-specific feature patterns.
-#' @param n_iter Total number of Gibbs sampling iterations.
-#' @param burn_in Number of initial iterations discarded as burn-in.
-#' @param a1 First shape parameter of the Beta prior for the
-#'   row-specific probabilities \code{alpha}.
-#' @param a2 Second shape parameter of the Beta prior for the
-#'   row-specific probabilities \code{alpha}.
-#' @param b1 First shape parameter of the Beta prior for the
-#'   column-specific probabilities \code{beta}.
-#' @param b2 Second shape parameter of the Beta prior for the
-#'   column-specific probabilities \code{beta}.
+#' @param R The number of latent factors (upper bound; the effective
+#'   number in use can fall below \code{R} via the factor-level
+#'   sparsity mechanism, see \code{\link{update_phi}}).
+#' @param n_iter Total number of Gibbs sweeps to run, including
+#'   burn-in.
+#' @param burn_in Number of initial sweeps to discard before storing
+#'   samples. Must be strictly less than \code{n_iter}. Default
+#'   \code{0} (no burn-in discarded).
+#' @param W_init,H_init,init_method,asso_seed Initialization controls for the factor matrices and optional Asso warm start.
+#' @param a1,a2,b1,b2,c1,c2,d1,d2,e1,e2,f1,f2,s1,s2 Beta-prior hyperparameters; defaults are given in the function signature.
+#' @param show_progress Display a \code{progress} package progress
+#'   bar tracking iteration count (including burn-in). Default
+#'   \code{TRUE}. Requires the \code{progress} package; if it is not
+#'   installed, sampling proceeds without a progress bar and a
+#'   one-time message is printed. Automatically ignored (treated as
+#'   \code{FALSE}) in non-interactive sessions.
 #'
-#' @return A list containing posterior samples collected after burn-in:
-#' \describe{
-#'   \item{\code{samples_p10}}{A numeric vector containing posterior
-#'     samples of \code{p10}.}
-#'   \item{\code{samples_p11}}{A numeric vector containing posterior
-#'     samples of \code{p11}.}
-#'   \item{\code{samples_alpha}}{A matrix containing posterior samples
-#'     of the row-specific probabilities \code{alpha}.}
-#'   \item{\code{samples_beta}}{A matrix containing posterior samples
-#'     of the column-specific probabilities \code{beta}.}
-#'   \item{\code{samples_W}}{A three-dimensional array containing
-#'     posterior samples of \code{W}.}
-#'   \item{\code{samples_H}}{A three-dimensional array containing
-#'     posterior samples of \code{H}.}
-#' }
+#' @return A list with elements \code{samples_W} (array,
+#'   \eqn{K \times R \times (n\_iter - burn\_in)}), \code{samples_H}
+#'   (array, \eqn{R \times G \times (n\_iter - burn\_in)}),
+#'   \code{samples_alpha} (matrix, \eqn{K \times (n\_iter - burn\_in)}),
+#'   \code{samples_beta} (matrix, \eqn{G \times (n\_iter - burn\_in)}),
+#'   \code{samples_psi} (matrix, \eqn{G \times (n\_iter - burn\_in)}),
+#'   \code{samples_phi} (matrix, \eqn{R \times (n\_iter - burn\_in)}),
+#'   \code{samples_pi}, \code{samples_p11}, \code{samples_p10}, and
+#'   \code{logpost_trace} (each a numeric vector of length
+#'   \code{n_iter - burn_in}).
 #'
 #' @details
-#' At each Gibbs sampling iteration, the function updates \code{alpha}
-#' and \code{beta}, samples the observation probabilities \code{p11}
-#' and \code{p10}, and subsequently updates the binary factor matrices
-#' \code{W} and \code{H}.
+#' Posterior samples are stored in pre-allocated arrays using the same
+#' underlying model and identical per-sweep update logic (the same
+#' \code{\link{update_W}}, \code{\link{update_H}}, etc.\ functions are
+#' used internally, in the same order), differing only in how results
+#' are returned: as pre-allocated arrays indexed by post-burn-in
+#' iteration, rather than a list of one snapshot per iteration. The
+#' array layout keeps memory contiguous per parameter (e.g.\ all of
+#' \code{samples_W} in one block) rather than per iteration, which can
+#' be more convenient for downstream array-based post-processing (e.g.
+#' \code{samples_W[,, idx]} for the \eqn{K \times R} draw at retained
+#' iteration \code{idx}, or \code{apply(samples_phi, 1, mean)} for the
+#' posterior mean of each \eqn{\phi_r}).
 #'
-#' Samples are stored only after the burn-in period. A progress bar is
-#' displayed while the Gibbs sampler is running.
+#' The Maximum A Posteriori (MAP) sample is identified after the fact
+#' via \code{which.max(logpost_trace)}, e.g.:
+#' \preformatted{
+#' idx   <- which.max(fit$logpost_trace)
+#' W_hat <- fit$samples_W[,, idx]
+#' H_hat <- fit$samples_H[,, idx]
+#' }
 #'
-run_BBMF<-function(X,W_o,H_o,n_iter,burn_in,a1,a2,b1,b2){
-  #Gibbs Sampling
-  W<-W_o
-  H<-H_o
-  R<-ncol(W_o)
-  K<-nrow(X)
-  G<-ncol(X)
-  
-  #Arrays for storing the samples
-  samples_W <-array(0, dim = c(K, R, n_iter - burn_in))
-  samples_H <- array(0, dim = c(R, G, n_iter - burn_in))
-  samples_alpha <- matrix(0, nrow = K, ncol = n_iter-burn_in)
-  samples_beta <- matrix(0, nrow = G, ncol = n_iter - burn_in)
-  samples_p11 <- numeric(n_iter - burn_in)
-  samples_p10 <- numeric(n_iter - burn_in)
-  
-  # Initialize the progress bar
-  pb_chain <- progress::progress_bar$new(format = "working [:bar] :percent in :elapsed",
-                               total = n_iter, clear = FALSE, width = 100)
-  
-  for (iter in 1:n_iter){
-    
-    # Update alpha and beta
-    alpha<-update_alpha(W,a1,a2)
-    beta<-update_beta(H,b1,b2)
-    
-    # Compute p11 and p10
-    pvals<-update_p(W,H,X)
-    #pvals<-update_p11_p10(W,H,X)
-    p11 <- pvals[1]
-    p10 <- pvals[2]
-    
-    # Update W and H
-    W<-update_W(W,H,X,alpha,p11=p11,p10=p10)
-    H<-update_H(W,H,X,beta,p11=p11,p10=p10)
-    # W<-update_W_Block_rows(W,H,X,alpha,p11=p11,p10=p10)
-    # H<-update_H_Block_columns(W,H,X,beta,p11=p11,p10=p10)
-    
-    # Update the progress bar
-    pb_chain$tick()
-    
-    #---------------------------------------------------------------------------
-    #Store samples after burn-in
-    if (iter > burn_in) {
-      samples_W[,,iter-burn_in]<-W
-      samples_H[,,iter-burn_in]<-H
-      samples_alpha[,iter-burn_in]<-alpha
-      samples_beta[,iter-burn_in] <-beta
-      samples_p11[iter - burn_in] <- p11
-      samples_p10[iter - burn_in] <- p10
-    }
+#' @seealso \code{\link{run_BBMF_ablation}} for fitting a specified nested-family variant,
+#'   \code{\link{run_multiple_BBMF}} for running several chains in
+#'   parallel.
+#'
+#' @export
+run_BBMF <- function(X, R, n_iter, burn_in = 0, W_init = NULL, H_init = NULL,
+                      init_method = c("asso", "random"), asso_seed = NULL,
+                      a1 = 1, a2 = 1, b1 = 1, b2 = 1, c1 = 1, c2 = 20, d1 = 1, d2 = 1,
+                      e1 = 1, e2 = 1, f1 = 1, f2 = 1, s1 = 1, s2 = 1,
+                      show_progress = TRUE) {
+
+  K <- nrow(X)
+  G <- ncol(X)
+  init_method <- match.arg(init_method)
+
+  if (burn_in >= n_iter) {
+    stop("burn_in must be strictly smaller than n_iter.")
   }
-  
-  #Terminate and clear the progress bar
-  pb_chain$terminate()
-  
-  #Return a List of Arrays
-  return(list(samples_p10=samples_p10,samples_p11=samples_p11,samples_alpha=samples_alpha,
-              samples_beta=samples_beta,samples_W=samples_W,samples_H=samples_H))  
+  if (xor(is.null(W_init), is.null(H_init))) {
+    stop("W_init and H_init must be supplied together, or not at all.")
+  }
+
+  if (!is.null(W_init)) {
+    stopifnot(nrow(W_init) == K, ncol(W_init) == R)
+    stopifnot(nrow(H_init) == R, ncol(H_init) == G)
+    W <- W_init
+    H <- H_init
+  } else if (init_method == "asso") {
+    if (!requireNamespace("rBMF", quietly = TRUE)) {
+      stop(
+        "init_method = \"asso\" (the default) requires the 'rBMF' package, ",
+        "which is not installed. Either install it (install.packages(\"rBMF\")), ",
+        "supply W_init and H_init directly, or set init_method = \"random\".",
+        call. = FALSE
+      )
+    }
+    asso_fit <- Asso_BBMF(X, R, seed = asso_seed)
+    W <- asso_fit$W_asso
+    H <- asso_fit$H_asso
+  } else {
+    W <- matrix(stats::rbinom(K * R, 1, 0.2), K, R)
+    H <- matrix(stats::rbinom(R * G, 1, 0.2), R, G)
+  }
+
+  alpha <- rep(0.3, K)
+  beta  <- rep(0.3, G)
+  psi   <- rep(1L, G)
+  pi_g  <- 0.5
+  phi   <- rep(0.8, R)
+  p11   <- 0.9
+  p10   <- 0.1
+
+  n_keep <- n_iter - burn_in
+
+  samples_W     <- array(0L, dim = c(K, R, n_keep))
+  samples_H     <- array(0L, dim = c(R, G, n_keep))
+  samples_alpha <- matrix(0, nrow = K, ncol = n_keep)
+  samples_beta  <- matrix(0, nrow = G, ncol = n_keep)
+  samples_psi   <- matrix(0L, nrow = G, ncol = n_keep)
+  samples_phi   <- matrix(0, nrow = R, ncol = n_keep)
+  samples_pi    <- numeric(n_keep)
+  samples_p11   <- numeric(n_keep)
+  samples_p10   <- numeric(n_keep)
+  logpost_trace <- numeric(n_keep)
+
+  progress_available <- requireNamespace("progress", quietly = TRUE)
+  if (show_progress && !progress_available) {
+    message(
+      "Package 'progress' not installed; proceeding without a progress bar. ",
+      "Install it with install.packages(\"progress\") for progress display."
+    )
+  }
+  use_progress <- show_progress && interactive() && progress_available
+  if (use_progress) {
+    pb_chain <- progress::progress_bar$new(
+      format = "  sampling [:bar] :percent eta: :eta",
+      total = n_iter, clear = FALSE, width = 60
+    )
+  }
+
+  for (iter in seq_len(n_iter)) {
+
+    W <- update_W(W, H, X, alpha, phi, p11, p10)
+    H <- update_H(W, H, X, beta, phi, p11, p10)
+
+    AB <- update_AB(W, alpha, phi)
+    CD <- update_CD(H, beta, phi)
+
+    alpha <- update_alpha(AB$A, a1, a2)
+    bp <- update_beta_psi(CD$C, beta, pi_g, b1, b2, c1, c2)
+    beta <- bp$beta
+    psi <- bp$psi
+    phi <- update_phi(AB$B, CD$D, s1, s2)
+    pi_g <- update_pi(psi, d1, d2)
+
+    Z <- bool_prod(W, H)
+    np <- update_noise(X, Z, p11, p10, e1, e2, f1, f2)
+    p11 <- np$p11
+    p10 <- np$p10
+
+    if (iter > burn_in) {
+      idx <- iter - burn_in
+      samples_W[, , idx]  <- W
+      samples_H[, , idx]  <- H
+      samples_alpha[, idx] <- alpha
+      samples_beta[, idx]  <- beta
+      samples_psi[, idx]   <- psi
+      samples_phi[, idx]   <- phi
+      samples_pi[idx]      <- pi_g
+      samples_p11[idx]     <- p11
+      samples_p10[idx]     <- p10
+      logpost_trace[idx]   <- compute_log_posterior(
+        X, W, H, alpha, beta, psi, pi_g, phi, p11, p10,
+        a1, a2, b1, b2, c1, c2, d1, d2, e1, e2, f1, f2, s1, s2
+      )
+    }
+
+    if (use_progress) pb_chain$tick()
+  }
+
+  if (use_progress) pb_chain$terminate()
+
+  return(list(
+    samples_W = samples_W, samples_H = samples_H,
+    samples_alpha = samples_alpha, samples_beta = samples_beta,
+    samples_psi = samples_psi, samples_phi = samples_phi,
+    samples_pi = samples_pi, samples_p11 = samples_p11, samples_p10 = samples_p10,
+    logpost_trace = logpost_trace
+  ))
 }

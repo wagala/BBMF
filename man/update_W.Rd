@@ -2,48 +2,54 @@
 % Please edit documentation in R/update_W.R
 \name{update_W}
 \alias{update_W}
-\title{Update the Binary Factor-Activation Matrix W}
+\title{Update the Factor-Activation Matrix W (Full Conditional)}
 \usage{
-update_W(W, H, X, alpha, p11, p10)
+update_W(W, H, X, alpha, phi, p11, p10)
 }
 \arguments{
 \item{W}{A binary matrix of dimension \eqn{K \times R} containing
-the current factor activations.}
+the current factor activations (updated column by column).}
 
-\item{H}{A binary matrix containing the current factor-specific
-feature patterns.}
+\item{H}{A binary matrix of dimension \eqn{R \times G} containing
+the current factor-specific feature patterns (held fixed during
+this call).}
 
-\item{X}{An observed binary data matrix.}
+\item{X}{An observed binary matrix of dimension \eqn{K \times G}.}
 
-\item{alpha}{A scalar, vector, or matrix of Bernoulli prior
-probabilities compatible with \code{W}.}
+\item{alpha}{A numeric vector of length \eqn{K} containing the
+per-sample activation probabilities \eqn{\alpha_k}.}
 
-\item{p11}{Probability of observing an entry equal to 1 when the
-corresponding reconstructed entry is 1.}
+\item{phi}{A numeric vector of length \eqn{R} containing the
+per-factor inclusion probabilities \eqn{\phi_r}.}
 
-\item{p10}{Probability of observing an entry equal to 1 when the
-corresponding reconstructed entry is 0.}
+\item{p11}{Sensitivity: \eqn{P(X_{kg}=1 \mid Z_{kg}=1)}.}
+
+\item{p10}{False-positive rate: \eqn{P(X_{kg}=1 \mid Z_{kg}=0)}.}
 }
 \value{
-An updated binary matrix \code{W} with the same dimensions
-as the input matrix.
+An updated binary matrix \code{W} of the same dimension as
+the input.
 }
 \description{
-Performs a Gibbs update of each entry of the binary matrix \code{W}.
-For each element \eqn{W_{kr}}, the function evaluates the
-log-posterior probability under the two possible states,
-\eqn{W_{kr}=0} and \eqn{W_{kr}=1}, normalizes the corresponding
-posterior masses, and samples a new binary value.
+Draws a new factor-activation matrix \code{W} from its full
+conditional distribution given the data, the current \code{H}, and
+the current values of every other parameter.
 }
 \details{
-The entries of \code{W} are updated sequentially. For each position
-\eqn{(k,r)}, the function computes the log-posterior probability
-after setting \eqn{W_{kr}} to 0 and then to 1.
-
-The two log-posterior values are normalized using \code{sumLog()}
-to obtain the conditional probability that \eqn{W_{kr}=1}. A new
-value is then sampled from a Bernoulli distribution.
-
-Because updates are sequential, each subsequent entry is updated
-conditional on the most recently updated values of \code{W}.
+For each factor \eqn{r}, the coverage of every entry \eqn{(k,g)} by
+the remaining factors, \eqn{Z_{kg}^{(-r)}}, is tracked via
+the coverage matrix \eqn{S = WH}, updated incrementally by a
+rank-one correction as each column of \code{W} is resampled (rather
+than recomputed from scratch), giving \eqn{O(KGR)} total cost per
+sweep. Only entries \eqn{g} with \eqn{H_{rg}=1} and
+\eqn{Z_{kg}^{(-r)}=0} are informative about \eqn{W_{kr}};
+for these entries \eqn{Z_{kg} = W_{kr}} exactly, giving a
+closed-form Bernoulli full conditional with success probability
+\deqn{\omega_{kr} = \frac{\alpha_k \phi_r \, p_{11}^{m^{(1)}_{kr}}
+ (1-p_{11})^{m^{(0)}_{kr}}}{\alpha_k \phi_r \, p_{11}^{m^{(1)}_{kr}}
+ (1-p_{11})^{m^{(0)}_{kr}} + (1-\alpha_k \phi_r) \, p_{10}^{m^{(1)}_{kr}}
+ (1-p_{10})^{m^{(0)}_{kr}}},}
+where \eqn{m^{(1)}_{kr}} and \eqn{m^{(0)}_{kr}} count the
+informative entries with \eqn{X_{kg}=1} and \eqn{X_{kg}=0}
+respectively.
 }

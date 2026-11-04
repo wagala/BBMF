@@ -2,29 +2,33 @@
 % Please edit documentation in R/bool_prod.R
 \name{bool_prod}
 \alias{bool_prod}
-\title{Compute the Boolean Matrix Product}
+\title{Boolean Matrix Product}
 \usage{
 bool_prod(W, H)
 }
 \arguments{
-\item{W}{A binary matrix of dimension \eqn{K \times R}.}
+\item{W}{A binary matrix of dimension \eqn{K \times R} containing
+the current factor activations.}
 
-\item{H}{A binary matrix of dimension \eqn{R \times G}.}
+\item{H}{A binary matrix of dimension \eqn{R \times G} containing
+the current factor-specific feature patterns.}
 }
 \value{
-An integer matrix of dimension \eqn{K \times G} containing
-the Boolean product of \code{W} and \code{H}.
+A binary (0/1) matrix of dimension \eqn{K \times G}
+containing the reconstructed entries \eqn{Z_{kg}}.
 }
 \description{
-Computes the Boolean product of two binary matrices \code{W} and
-\code{H}. Contributions from the latent factors are combined using
-the logical OR operation.
+Computes the Boolean (disjunctive) matrix product of two binary
+matrices \code{W} and \code{H}, i.e. the reconstructed matrix
+\eqn{Z = W \circ H}, where entry \eqn{Z_{kg} = 1} if
+and only if at least one factor \eqn{r} satisfies
+\eqn{W_{kr} = H_{rg} = 1}.
 }
 \details{
-For each latent factor \eqn{r}, the function combines column
-\eqn{r} of \code{W} with row \eqn{r} of \code{H}. The resulting
-contributions are combined across factors using logical OR.
-
-The returned matrix has integer storage mode, with entries equal
-to 0 or 1.
+The Boolean product is computed efficiently via ordinary
+(real-valued) matrix multiplication: since \eqn{W_{kr}} and
+\eqn{H_{rg}} are each 0 or 1, the ordinary matrix product
+\eqn{(WH)_{kg}} counts the number of factors \eqn{r} for which
+\eqn{W_{kr} = H_{rg} = 1} simultaneously. Thresholding this count
+at zero recovers the Boolean OR exactly.
 }

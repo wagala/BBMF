@@ -2,30 +2,39 @@
 % Please edit documentation in R/update_alpha.R
 \name{update_alpha}
 \alias{update_alpha}
-\title{Update the Row-Specific Bernoulli Probabilities Alpha}
+\title{Update the Per-Sample Activation Probabilities alpha (Full Conditional)}
 \usage{
-update_alpha(W, a1, a2)
+update_alpha(A, a1, a2)
 }
 \arguments{
-\item{W}{A binary matrix of dimension \eqn{K \times R} containing
-the current factor activations.}
+\item{A}{A binary matrix of dimension \eqn{K \times R}, from
+\code{\link{update_AB}} (or equal to \code{W} directly if
+\code{phi} is fixed at 1; see Details).}
 
-\item{a1}{First shape parameter of the Beta prior for \code{alpha}.}
+\item{a1}{Shape-1 hyperparameter of the Beta prior on
+\code{alpha}.}
 
-\item{a2}{Second shape parameter of the Beta prior for \code{alpha}.}
+\item{a2}{Shape-2 hyperparameter of the Beta prior on
+\code{alpha}.}
 }
 \value{
-A numeric vector of length \eqn{K} containing the updated
-row-specific probabilities \code{alpha}.
+A numeric vector of length \eqn{K}, the updated
+\code{alpha}.
 }
 \description{
-Samples the row-specific Bernoulli probabilities \code{alpha} from
-their full conditional Beta distributions given the current binary
-factor-activation matrix \code{W}.
+Draws a new vector of per-sample activation probabilities
+\code{alpha} from its full conditional distribution, using the
+auxiliary matrix \code{A}.
 }
 \details{
-For each row \eqn{k}, the number of active factors is given by
-\code{sum(W[k, ])}, while the number of inactive factors is given by
-\code{sum(1 - W[k, ])}. Each \eqn{\alpha_k} is then sampled from its
-Beta full conditional distribution.
+In the augmented model, \code{A} (not \code{W}) is the variable
+directly governed by \code{alpha}:
+\eqn{A_{kr} \mid \alpha_k \sim \mathrm{Bernoulli}(\alpha_k)}, giving
+the conjugate update
+\deqn{\alpha_k \mid \mathrm{rest} \sim \mathrm{Beta}\!\left(a_1 +
+ \textstyle\sum_r A_{kr},\ \ a_2 + R - \sum_r A_{kr}\right).}
+When \code{phi} is fixed at 1 for every factor (e.g. the
+\code{BBMF-NoPhi} ablation variant), \eqn{A_{kr} = W_{kr}}
+deterministically, and \code{W} may be passed directly in place of
+\code{A}.
 }
