@@ -16,10 +16,10 @@ the current factor-specific feature patterns.}
 \item{X}{An observed binary matrix of dimension \eqn{K \times G}.}
 
 \item{p11}{Probability of observing \eqn{X_{kg}=1} when the
-reconstructed entry \eqn{\tilde{X}_{kg}=1}.}
+reconstructed entry \eqn{Z_{kg}=1}.}
 
 \item{p10}{Probability of observing \eqn{X_{kg}=1} when the
-reconstructed entry \eqn{\tilde{X}_{kg}=0}.}
+reconstructed entry \eqn{Z_{kg}=0}.}
 }
 \value{
 A numeric scalar containing the log-likelihood of the

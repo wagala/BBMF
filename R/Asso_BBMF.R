@@ -39,7 +39,7 @@
 #' reconstructed as
 #'
 #' \deqn{
-#' X = W \circ H,
+#' Z = W \circ H,
 #' }
 #'
 #' where \eqn{\circ} denotes the Boolean matrix product. Logical AND
@@ -48,8 +48,17 @@
 #'
 #' The package \code{rBMF} must be installed to use this function.
 #'
+#' The output \code{W_asso}, \code{H_asso} of this function is
+#' intended to be passed directly as the \code{W_init}, \code{H_init}
+#' arguments of \code{\link{run_BBMF}}, matching the
+#' initialization strategy used throughout the paper (Section 4.3):
+#' BBMF is initialized at the solution returned by Asso, rather than
+#' at a random starting point, since a random start can occasionally
+#' land the chain in a poorly-supported local mode (see the vignette
+#' on sampler diagnostics for a worked example).
+#'
 #' @seealso
-#' \code{\link{bool_prod}}
+#' \code{\link{bool_prod}}, \code{\link{run_BBMF}}
 #'
 #' @examples
 #' \dontrun{
@@ -70,22 +79,26 @@
 #' fit$W_asso
 #' fit$H_asso
 #' fit$X_asso
+#'
+#' # typical usage: warm-start the Gibbs sampler at the Asso solution
+#' out <- run_BBMF(X, R = 2, n_iter = 1000,
+#'                       W_init = fit$W_asso, H_init = fit$H_asso)
 #' }
 #'
 #' @export
 #'
 Asso_BBMF <- function(X, R, seed = NULL) {
-  
+
   if (!requireNamespace("rBMF", quietly = TRUE)) {
     stop("Package 'rBMF' is required to use Asso_BBMF().")
   }
-  
+
   if (!is.null(seed)) {
     set.seed(seed)
   }
-  
+
   Xb <- X == 1
-  
+
   Res_Asso <- rBMF::Asso_approximate(
     Xb,
     R,
@@ -96,12 +109,12 @@ Asso_BBMF <- function(X, R, seed = NULL) {
       verbose = 0
     )
   )
-  
+
   W_asso <- as.matrix(Res_Asso$O) * 1
   H_asso <- as.matrix(Res_Asso$B) * 1
-  
+
   X_asso <- bool_prod(W_asso, H_asso)
-  
+
   return(
     list(
       W_asso = W_asso,

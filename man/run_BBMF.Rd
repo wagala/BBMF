@@ -2,63 +2,102 @@
 % Please edit documentation in R/run_BBMF.R
 \name{run_BBMF}
 \alias{run_BBMF}
-\title{Run the Bayesian Boolean Matrix Factorization Gibbs Sampler}
+\title{Run the BBMF Gibbs Sampler (Array-Based Output, with Burn-In)}
 \usage{
-run_BBMF(X, W_o, H_o, n_iter, burn_in, a1, a2, b1, b2)
+run_BBMF(
+  X,
+  R,
+  n_iter,
+  burn_in = 0,
+  W_init = NULL,
+  H_init = NULL,
+  init_method = c("asso", "random"),
+  asso_seed = NULL,
+  a1 = 1,
+  a2 = 1,
+  b1 = 1,
+  b2 = 1,
+  c1 = 1,
+  c2 = 20,
+  d1 = 1,
+  d2 = 1,
+  e1 = 1,
+  e2 = 1,
+  f1 = 1,
+  f2 = 1,
+  s1 = 1,
+  s2 = 1,
+  show_progress = TRUE
+)
 }
 \arguments{
 \item{X}{An observed binary matrix of dimension \eqn{K \times G}.}
 
-\item{W_o}{Initial binary matrix of dimension \eqn{K \times R}
-containing the factor activations.}
+\item{R}{The number of latent factors (upper bound; the effective
+number in use can fall below \code{R} via the factor-level
+sparsity mechanism, see \code{\link{update_phi}}).}
 
-\item{H_o}{Initial binary matrix of dimension \eqn{R \times G}
-containing the factor-specific feature patterns.}
+\item{n_iter}{Total number of Gibbs sweeps to run, including
+burn-in.}
 
-\item{n_iter}{Total number of Gibbs sampling iterations.}
+\item{burn_in}{Number of initial sweeps to discard before storing
+samples. Must be strictly less than \code{n_iter}. Default
+\code{0} (no burn-in discarded).}
 
-\item{burn_in}{Number of initial iterations discarded as burn-in.}
+\item{W_init, H_init, init_method, asso_seed}{Initialization controls for the factor matrices and optional Asso warm start.}
 
-\item{a1}{First shape parameter of the Beta prior for the
-row-specific probabilities \code{alpha}.}
+\item{a1, a2, b1, b2, c1, c2, d1, d2, e1, e2, f1, f2, s1, s2}{Beta-prior hyperparameters; defaults are given in the function signature.}
 
-\item{a2}{Second shape parameter of the Beta prior for the
-row-specific probabilities \code{alpha}.}
-
-\item{b1}{First shape parameter of the Beta prior for the
-column-specific probabilities \code{beta}.}
-
-\item{b2}{Second shape parameter of the Beta prior for the
-column-specific probabilities \code{beta}.}
+\item{show_progress}{Display a \code{progress} package progress
+bar tracking iteration count (including burn-in). Default
+\code{TRUE}. Requires the \code{progress} package; if it is not
+installed, sampling proceeds without a progress bar and a
+one-time message is printed. Automatically ignored (treated as
+\code{FALSE}) in non-interactive sessions.}
 }
 \value{
-A list containing posterior samples collected after burn-in:
-\describe{
-\item{\code{samples_p10}}{A numeric vector containing posterior
-samples of \code{p10}.}
-\item{\code{samples_p11}}{A numeric vector containing posterior
-samples of \code{p11}.}
-\item{\code{samples_alpha}}{A matrix containing posterior samples
-of the row-specific probabilities \code{alpha}.}
-\item{\code{samples_beta}}{A matrix containing posterior samples
-of the column-specific probabilities \code{beta}.}
-\item{\code{samples_W}}{A three-dimensional array containing
-posterior samples of \code{W}.}
-\item{\code{samples_H}}{A three-dimensional array containing
-posterior samples of \code{H}.}
-}
+A list with elements \code{samples_W} (array,
+\eqn{K \times R \times (n\_iter - burn\_in)}), \code{samples_H}
+(array, \eqn{R \times G \times (n\_iter - burn\_in)}),
+\code{samples_alpha} (matrix, \eqn{K \times (n\_iter - burn\_in)}),
+\code{samples_beta} (matrix, \eqn{G \times (n\_iter - burn\_in)}),
+\code{samples_psi} (matrix, \eqn{G \times (n\_iter - burn\_in)}),
+\code{samples_phi} (matrix, \eqn{R \times (n\_iter - burn\_in)}),
+\code{samples_pi}, \code{samples_p11}, \code{samples_p10}, and
+\code{logpost_trace} (each a numeric vector of length
+\code{n_iter - burn_in}).
 }
 \description{
-Runs a Gibbs sampler for the Bayesian Boolean Matrix Factorization
-model using an observed binary matrix \code{X} and initial values
-for the binary factor matrices \code{W} and \code{H}.
+Runs the full Gibbs sampler for the Bayesian Boolean Matrix
+Factorization model for a single chain, discarding an initial
+burn-in period and returning posterior samples as pre-allocated
+arrays/matrices/vectors rather than a list of per-iteration
+snapshots.
 }
 \details{
-At each Gibbs sampling iteration, the function updates \code{alpha}
-and \code{beta}, samples the observation probabilities \code{p11}
-and \code{p10}, and subsequently updates the binary factor matrices
-\code{W} and \code{H}.
+Posterior samples are stored in pre-allocated arrays using the same
+underlying model and identical per-sweep update logic (the same
+\code{\link{update_W}}, \code{\link{update_H}}, etc.\ functions are
+used internally, in the same order), differing only in how results
+are returned: as pre-allocated arrays indexed by post-burn-in
+iteration, rather than a list of one snapshot per iteration. The
+array layout keeps memory contiguous per parameter (e.g.\ all of
+\code{samples_W} in one block) rather than per iteration, which can
+be more convenient for downstream array-based post-processing (e.g.
+\code{samples_W[,, idx]} for the \eqn{K \times R} draw at retained
+iteration \code{idx}, or \code{apply(samples_phi, 1, mean)} for the
+posterior mean of each \eqn{\phi_r}).
 
-Samples are stored only after the burn-in period. A progress bar is
-displayed while the Gibbs sampler is running.
+The Maximum A Posteriori (MAP) sample is identified after the fact
+via \code{which.max(logpost_trace)}, e.g.:
+\preformatted{
+idx   <- which.max(fit$logpost_trace)
+W_hat <- fit$samples_W[,, idx]
+H_hat <- fit$samples_H[,, idx]
+}
+}
+\seealso{
+\code{\link{run_BBMF_ablation}} for fitting a specified nested-family variant,
+\code{\link{run_multiple_BBMF}} for running several chains in
+parallel.
 }

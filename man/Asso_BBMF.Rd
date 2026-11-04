@@ -50,7 +50,7 @@ After estimating the factor matrices, the fitted binary matrix is
 reconstructed as
 
 \deqn{
-X = W \circ H,
+Z = W \circ H,
 }
 
 where \eqn{\circ} denotes the Boolean matrix product. Logical AND
@@ -58,6 +58,15 @@ combines entries within a latent factor, while logical OR combines
 contributions across latent factors.
 
 The package \code{rBMF} must be installed to use this function.
+
+The output \code{W_asso}, \code{H_asso} of this function is
+intended to be passed directly as the \code{W_init}, \code{H_init}
+arguments of \code{\link{run_BBMF}}, matching the
+initialization strategy used throughout the paper (Section 4.3):
+BBMF is initialized at the solution returned by Asso, rather than
+at a random starting point, since a random start can occasionally
+land the chain in a poorly-supported local mode (see the vignette
+on sampler diagnostics for a worked example).
 }
 \examples{
 \dontrun{
@@ -78,9 +87,13 @@ fit <- Asso_BBMF(
 fit$W_asso
 fit$H_asso
 fit$X_asso
+
+# typical usage: warm-start the Gibbs sampler at the Asso solution
+out <- run_BBMF(X, R = 2, n_iter = 1000,
+                      W_init = fit$W_asso, H_init = fit$H_asso)
 }
 
 }
 \seealso{
-\code{\link{bool_prod}}
+\code{\link{bool_prod}}, \code{\link{run_BBMF}}
 }

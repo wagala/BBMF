@@ -2,42 +2,28 @@
 % Please edit documentation in R/update_pi.R
 \name{update_pi}
 \alias{update_pi}
-\title{Update the Global Sparsity Probability Pi}
+\title{Update the Slab-Prior Probability pi (Full Conditional)}
 \usage{
-update_pi(psi_g, d1, d2)
+update_pi(psi, d1, d2)
 }
 \arguments{
-\item{psi_g}{A binary vector of length \eqn{G} containing the
-feature-specific sparsity indicators.}
+\item{psi}{A binary vector of length \eqn{G}, the current
+sparsity indicators.}
 
-\item{d1}{First shape parameter of the Beta prior for \code{pi}.}
+\item{d1}{Shape-1 hyperparameter of the Beta prior on \code{pi}.}
 
-\item{d2}{Second shape parameter of the Beta prior for \code{pi}.}
+\item{d2}{Shape-2 hyperparameter of the Beta prior on \code{pi}.}
 }
 \value{
-A numeric scalar containing the updated value of \code{pi}.
+A numeric scalar, the updated \code{pi}.
 }
 \description{
-Samples the global sparsity probability \code{pi} from its full
-conditional Beta distribution given the current binary sparsity
-indicators \eqn{\psi_g}.
+Draws a new value of \code{pi}, the prior probability that a
+feature belongs to the slab component, from its full conditional
+distribution.
 }
 \details{
-Let \eqn{\boldsymbol{\psi} = (\psi_1, \ldots, \psi_G)} denote the
-vector of binary sparsity indicators. Assuming
-
-\deqn{
-\pi \sim \mathrm{Beta}(d_1, d_2),
-}
-
-the full conditional distribution is
-
-\deqn{
-\pi \mid \boldsymbol{\psi}
-\sim
-\mathrm{Beta}\left(
-d_1 + \sum_{g=1}^{G}\psi_g,
-d_2 + G - \sum_{g=1}^{G}\psi_g
-\right).
-}
+An ordinary Beta-Bernoulli conjugate update,
+\deqn{\pi \mid \mathrm{rest} \sim \mathrm{Beta}\!\left(d_1 +
+ \textstyle\sum_g \psi_g,\ \ d_2 + G - \sum_g \psi_g\right).}
 }
