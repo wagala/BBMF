@@ -16,7 +16,7 @@ A list with logical elements \code{fix_phi},
 \code{symmetric_noise}.
 }
 \description{
-Maps a variant name from the nested ablation family (Section 2.3)
+Maps a variant name from the nested ablation family (Section 2.4)
 to the four restriction switches that define it.
 }
 \details{

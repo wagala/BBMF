@@ -1,6 +1,6 @@
 #' Ablation Variant Flags
 #'
-#' Maps a variant name from the nested ablation family (Section 2.3)
+#' Maps a variant name from the nested ablation family (Section 2.4)
 #' to the four restriction switches that define it.
 #'
 #' @param variant One of \code{"Full"}, \code{"NoPhi"}, \code{"Flat"},

@@ -1,7 +1,7 @@
 #' Run a BBMF Ablation Variant (Array-Based Output, with Burn-In)
 #'
 #' Runs the full Gibbs sampler for one variant of the nested ablation
-#' family (Section 2.3: \code{"Full"}, \code{"NoPhi"}, \code{"Flat"},
+#' family (Section 2.4: \code{"Full"}, \code{"NoPhi"}, \code{"Flat"},
 #' \code{"Global"}, \code{"Sym"}) for a single chain, discarding an
 #' initial burn-in period and returning posterior samples as
 #' pre-allocated arrays/matrices/vectors, in the same format as
