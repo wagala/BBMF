@@ -30,18 +30,14 @@ where
 
 - $W \in \{0,1\}^{K \times R}$ is the sample-factor matrix,
 - $H \in \{0,1\}^{R \times G}$ is the factor-feature matrix,
-- $R$ is the factorization rank,
+- $R$ is the factorization rank, and
 - $\circ$ denotes Boolean matrix multiplication.
 
 For each entry,
 
+
 $$
-Z_{kg}
-=
-\bigvee_{r=1}^{R}
-\left(
-W_{kr} \wedge H_{rg}
-\right).
+Z_{kg} = \bigvee_{r=1}^{R}\left(W_{kr} \wedge H_{rg}\right).
 $$
 
 Thus, logical AND combines the sample and feature memberships within a factor, while logical OR combines contributions across factors.
@@ -85,4 +81,5 @@ remotes::install_github(
   "wagala/BBMF",
   build_vignettes = TRUE,
   dependencies = TRUE
-
+)
+```
